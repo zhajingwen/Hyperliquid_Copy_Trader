@@ -110,7 +110,6 @@ class NotificationService:
     async def send_startup_notification(
         self,
         target_wallets: list[str] = None,
-        sizing_mode: str = "",
         ratios: dict[str, str] = None,
         leverage_adjustment: float = 1.0
     ):
@@ -137,7 +136,6 @@ class NotificationService:
 {targets_text}
 
 <b>配置信息：</b>
-• 仓位模式: {sizing_mode.title()}
 {ratio_line}
 • 杠杆: {leverage_adjustment}x（相对目标）
 • 状态: <b>运行中</b> 🟢

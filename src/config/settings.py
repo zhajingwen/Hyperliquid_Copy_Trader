@@ -18,7 +18,6 @@ class TelegramConfig(BaseModel):
     chat_id: Optional[str] = None
 
 class SizingConfig(BaseModel):
-    mode: str = "proportional"  # "fixed"（固定）或 "proportional"（按比例）
     portfolio_ratio: float = 0.01  # 1:100 比例
     max_position_size: float = 1000.0
     max_total_exposure: float = 5000.0

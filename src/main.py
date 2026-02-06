@@ -18,7 +18,6 @@ MIN_POSITION_SIZE_USD = 10.0
 monitor: WalletMonitor = None
 executor: TradeExecutor = None
 position_sizer: PositionSizer = None
-client: HyperliquidClient = None
 telegram_bot: TelegramBot = None
 notifier: NotificationService = None
 
@@ -529,12 +528,11 @@ async def get_status() -> str:
 📍 <b>持仓数量：</b> {total_positions}
 ⏰ <b>运行时间：</b> {uptime:.1f}h
 
-<b>仓位模式：</b> {settings.sizing.mode.title()}
 <b>杠杆：</b> {settings.leverage.adjustment_ratio}x（相对目标）
     """.strip()
 
 
-def get_orders() -> list:
+async def get_orders() -> list:
     """获取当前挂单（供 Telegram 命令使用）"""
     if not monitor:
         return []
@@ -704,7 +702,7 @@ async def main():
     """
     跟单交易机器人主入口
     """
-    global monitor, executor, position_sizer, client, telegram_bot, notifier, bot_start_time
+    global monitor, executor, position_sizer, telegram_bot, notifier, bot_start_time
     global account_balance, trades_copied_count, target_ratios
 
     bot_start_time = datetime.now()
@@ -741,9 +739,6 @@ async def main():
         logger.info(f"   目标 {i}: {addr}")
 
     # 初始化组件
-    # 监听始终使用主网
-    client = HyperliquidClient(settings.hyperliquid.api_url)
-
     monitor = WalletMonitor(
         settings.target_wallets,
         settings.hyperliquid.api_url,
@@ -769,7 +764,7 @@ async def main():
         balance_client = HyperliquidClient(settings.hyperliquid.testnet_api_url)
         network_name = "测试网"
     else:
-        balance_client = client
+        balance_client = HyperliquidClient(settings.hyperliquid.api_url)
         network_name = "主网"
 
     logger.info(f"\n💳 正在获取{network_name}账户余额...")
@@ -865,12 +860,10 @@ async def main():
         settings.sizing.portfolio_ratio = first_ratio
 
     logger.info(f"\n🔧 跟单交易设置:")
-    logger.info(f"   仓位模式: {settings.sizing.mode}")
     logger.info(f"   杠杆调整: {settings.leverage.adjustment_ratio}x")
     logger.info(f"   最大仓位: ${settings.sizing.max_position_size:,.2f}")
 
     position_sizer = PositionSizer(
-        mode=settings.sizing.mode,
         portfolio_ratio=settings.sizing.portfolio_ratio,
         max_position_size=settings.sizing.max_position_size,
         max_total_exposure=settings.sizing.max_total_exposure
@@ -1094,7 +1087,6 @@ async def main():
 
             await notifier.send_startup_notification(
                 target_wallets=settings.target_wallets,
-                sizing_mode=settings.sizing.mode,
                 ratios=ratios,
                 leverage_adjustment=settings.leverage.adjustment_ratio
             )

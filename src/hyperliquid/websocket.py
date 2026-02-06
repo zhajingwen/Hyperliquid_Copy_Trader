@@ -88,8 +88,7 @@ class HyperliquidWebSocket:
             # 判断更新的频道/类型
             channel = data.get("channel", "unknown")
 
-            # 记录解析后的数据
-            logger.info(f"📦 已解析 - 频道: '{channel}', 键: {list(data.keys())}")
+            logger.debug(f"📦 已解析 - 频道: '{channel}', 键: {list(data.keys())}")
 
             # 创建更新对象
             update = WebSocketUpdate(

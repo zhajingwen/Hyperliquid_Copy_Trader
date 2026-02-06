@@ -10,7 +10,6 @@ class PositionSizer:
 
     def __init__(
         self,
-        mode: str = "proportional",
         portfolio_ratio: float = 0.01,
         max_position_size: float = 1000.0,
         max_total_exposure: float = 5000.0
@@ -18,7 +17,6 @@ class PositionSizer:
         """初始化仓位计算器
 
         Args:
-            mode: "proportional"（按比例）或 "fixed"（固定金额）
             portfolio_ratio: 按比例模式下的比率（如 0.01 = 1:100）
             max_position_size: 单个仓位最大金额
             max_total_exposure: 所有仓位最大总敞口
@@ -27,7 +25,7 @@ class PositionSizer:
         self.max_position_size = max_position_size
         self.max_total_exposure = max_total_exposure
 
-        logger.info(f"仓位计算器已初始化 - 模式: {mode}, 比率: {portfolio_ratio}")
+        logger.info(f"仓位计算器已初始化 - 比率: {portfolio_ratio}")
 
     def calculate_size(
         self,
