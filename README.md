@@ -1,4 +1,4 @@
-# Hyperliquid Copy Trader
+# Hyperliquid 跟单交易机器人
 
 <p align="center">
   <a href="https://hyperfoundation.org/" target="_blank">
@@ -10,62 +10,62 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://www.docker.com/)
 
-Automated copy trading bot for Hyperliquid DEX. Copies trades from any wallet in real-time with automatic position sizing.
+Hyperliquid DEX 自动跟单交易机器人。实时复制任意钱包的交易，并自动调整仓位大小。
 
-## Features
+## 功能特性
 
-- Real-time trade copying via WebSocket
-- Automatic position sizing based on account balance ratio
-- Integer leverage with asset-specific limits
-- Market and limit order support
-- Copy existing positions on startup
-- Simulated trading mode for testing
-- Telegram notifications (optional)
+- 通过 WebSocket 实时跟单
+- 根据账户余额比例自动计算仓位大小
+- 整数杠杆，支持资产特定上限
+- 支持市价单和限价单
+- 启动时自动复制已有持仓
+- 模拟交易模式，可用于测试
+- Telegram 通知（可选）
 
-## Quick Start
+## 快速开始
 
-### Docker (Recommended)
+### Docker（推荐）
 
 ```bash
 docker-compose up -d
 ```
 
-### Manual Installation
+### 手动安装
 
-1. Install Python 3.12+
-2. Install dependencies:
+1. 安装 Python 3.12+
+2. 安装依赖：
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Configure .env file with your settings
-4. Run the bot:
+3. 配置 .env 文件
+4. 启动机器人：
 
 ```bash
 python src/main.py
 ```
 
-## Configuration
+## 配置说明
 
-Edit the `.env` file:
+编辑 `.env` 文件：
 
 ```properties
 # Hyperliquid API
 HYPERLIQUID_API_URL=https://api.hyperliquid.xyz
 
-# Your Hyperliquid credentials (leave empty for simulation)
+# 你的 Hyperliquid 凭证（留空则为模拟模式）
 HYPERLIQUID_WALLET_ADDRESS=
 HYPERLIQUID_PRIVATE_KEY=
 
-# Target to copy (wallet or vault)
+# 跟单目标（钱包地址或金库地址）
 TARGET_WALLET_ADDRESS=0x...
 
-# Trading mode
+# 交易模式
 SIMULATED_TRADING=true
 SIMULATED_ACCOUNT_BALANCE=10000.0
 
-# Copy settings
+# 跟单设置
 COPY_OPEN_POSITIONS=true
 COPY_EXISTING_ORDERS=true
 AUTO_ADJUST_SIZE=true
@@ -75,152 +75,152 @@ MAX_OPEN_TRADES=x
 MAX_OPEN_ORDERS=x
 MAX_ACCOUNT_EQUITY=x
 
-# Asset Filters
-BLOCKED_ASSETS=BTC,ETH  # Comma-separated list (e.g., BTC,ETH,SOL)
+# 资产过滤
+BLOCKED_ASSETS=BTC,ETH  # 以逗号分隔（例如：BTC,ETH,SOL）
 
-# Telegram (optional)
+# Telegram（可选）
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 
-# Database
+# 数据库
 DATABASE_URL=sqlite:///./data/trading.db
 
-# Logging
+# 日志
 LOG_LEVEL=INFO
 LOG_FILE=./logs/trading.log
 ```
 
-Notes:
-- `TARGET_WALLET_ADDRESS` accepts either a wallet address or a vault address.
-- `x` means unlimited; set an integer to cap `MAX_OPEN_TRADES`, `MAX_OPEN_ORDERS`, or `MAX_ACCOUNT_EQUITY`.
-- Hyperliquid enforces a $10 minimum notional per order. If your account is much smaller than the target, small fills will be skipped when the proportional size falls below $10. Increase balance or reduce the ratio gap to copy more trades.
+注意事项：
+- `TARGET_WALLET_ADDRESS` 可以填写钱包地址或金库地址。
+- `x` 表示不限制；设置整数可限制 `MAX_OPEN_TRADES`（最大开仓数）、`MAX_OPEN_ORDERS`（最大挂单数）或 `MAX_ACCOUNT_EQUITY`（最大账户权益）。
+- Hyperliquid 强制要求每笔订单最低名义价值为 $10。如果你的账户远小于目标账户，当按比例计算的仓位低于 $10 时，小额成交将被跳过。增加账户余额或缩小比例差距可以跟单更多交易。
 
-## Leverage Adjustment
+## 杠杆调整
 
-The `LEVERAGE_ADJUSTMENT` setting controls risk:
+`LEVERAGE_ADJUSTMENT` 设置用于控制风险：
 
-- 0.5 = Use 50% of target's leverage (safer)
-- 1.0 = Match target's leverage exactly
-- 2.0 = Use 200% of target's leverage (more aggressive)
+- 0.5 = 使用目标杠杆的 50%（更安全）
+- 1.0 = 完全匹配目标杠杆
+- 2.0 = 使用目标杠杆的 200%（更激进）
 
-Leverage is automatically rounded to integers and capped at asset-specific maximums.
+杠杆会自动取整为整数，并限制在资产特定的最大值范围内。
 
-## Blocked Assets
+## 屏蔽资产
 
-The `BLOCKED_ASSETS` setting lets you exclude specific assets from copying:
+`BLOCKED_ASSETS` 设置可以排除特定资产的跟单：
 
 ```properties
 BLOCKED_ASSETS=BTC,ETH,SOL
 ```
 
-When the target wallet trades these assets, the bot will:
+当目标钱包交易这些资产时，机器人将：
 
-- Log a warning message
-- Skip copying the trade
-- Continue monitoring other assets normally
+- 记录警告日志
+- 跳过该笔交易的跟单
+- 继续正常监控其他资产
 
-This is useful for:
+适用场景：
 
-- Avoiding high-volatility assets
-- Excluding assets you're manually trading
-- Managing risk by limiting exposure to certain markets
+- 避免高波动性资产
+- 排除你正在手动交易的资产
+- 通过限制特定市场的敞口来管理风险
 
-Note: Asset symbols are case-insensitive (BTC, btc, Btc all work).
+注意：资产代码不区分大小写（BTC、btc、Btc 均可）。
 
-## Position Sizing
+## 仓位计算
 
-Position sizes are automatically calculated based on the ratio of your account balance to the target wallet balance.
+仓位大小根据你的账户余额与目标钱包余额的比例自动计算。
 
-Example:
+示例：
 
-- Target wallet: $100,000
-- Your account: $10,000
-- Ratio: 1:10
-- Target opens 1 BTC position = You open 0.1 BTC position
+- 目标钱包：$100,000
+- 你的账户：$10,000
+- 比例：1:10
+- 目标开仓 1 BTC = 你开仓 0.1 BTC
 
-## Docker Commands
+## Docker 命令
 
 ### Windows
 
-Use the batch files in the `windows/` folder:
+使用 `windows/` 文件夹中的批处理文件：
 
 ```cmd
 cd windows
-start.bat    # Start the bot
-logs.bat     # View logs
-stop.bat     # Stop the bot
+start.bat    # 启动机器人
+logs.bat     # 查看日志
+stop.bat     # 停止机器人
 ```
 
 ### Linux/Mac
 
-Use the shell scripts in the `linux/` folder:
+使用 `linux/` 文件夹中的 Shell 脚本：
 
 ```bash
 cd linux
-chmod +x *.sh       # Make executable (first time only)
-./start.sh          # Start the bot
-./logs.sh           # View logs
-./stop.sh           # Stop the bot
+chmod +x *.sh       # 添加执行权限（仅首次需要）
+./start.sh          # 启动机器人
+./logs.sh           # 查看日志
+./stop.sh           # 停止机器人
 ```
 
-### Manual Docker Commands
+### 手动 Docker 命令
 
-Start bot:
+启动机器人：
 
 ```bash
 docker-compose up -d
 ```
 
-View logs:
+查看日志：
 
 ```bash
 docker-compose logs -f
 ```
 
-Stop bot:
+停止机器人：
 
 ```bash
 docker-compose down
 ```
 
-Rebuild after code changes:
+修改代码后重新构建：
 
 ```bash
 docker-compose up -d --build
 ```
 
-## Telegram Bot
+## Telegram 机器人
 
-To enable Telegram notifications:
+启用 Telegram 通知的步骤：
 
-1. Create bot with @BotFather on Telegram
-2. Get your bot token
-3. Send a message to your bot
-4. Get your chat ID from: https://api.telegram.org/bot `<TOKEN>`/getUpdates
-5. Add both values to .env file
+1. 在 Telegram 上通过 @BotFather 创建机器人
+2. 获取机器人 Token
+3. 向你的机器人发送一条消息
+4. 通过以下链接获取 Chat ID：https://api.telegram.org/bot `<TOKEN>`/getUpdates
+5. 将 Token 和 Chat ID 填入 .env 文件
 
-Available commands:
+可用命令：
 
-- /status - Bot status and balance
-- /positions - Current positions
-- /pnl - Profit and loss report
-- /pause - Pause copying
-- /resume - Resume copying
+- /status - 机器人状态和余额
+- /positions - 当前持仓
+- /pnl - 盈亏报告
+- /pause - 暂停跟单
+- /resume - 恢复跟单
 
-## Disclaimer
+## 免责声明
 
-Trading cryptocurrencies involves substantial risk of loss. This software is provided as-is without any warranties. Use at your own risk. The author is not responsible for any financial losses.
+加密货币交易涉及重大损失风险。本软件按原样提供，不附带任何保证。使用风险自负。作者不对任何经济损失承担责任。
 
-## Support
+## 支持
 
-Discord: maskiplays
+Discord：maskiplays
 
-## Donations
+## 捐赠
 
-If you find this bot useful, donations are appreciated:
+如果你觉得这个机器人有用，欢迎捐赠：
 
-Arbitrum USDC: 0x2987F53372c02D1a4C67241aA1840C1E83c480fF
+Arbitrum USDC：0x2987F53372c02D1a4C67241aA1840C1E83c480fF
 
-## Final Thoughts
-10/10 Crash fucking sucked
-Hyperliquid.
+## 写在最后
+10/10 暴跌真他妈太惨了
+Hyperliquid。
