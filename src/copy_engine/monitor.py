@@ -35,13 +35,6 @@ class WalletMonitor:
         for addr in target_addresses:
             logger.info(f"钱包监控器已初始化，目标地址: {addr}")
 
-    @property
-    def current_state(self) -> Optional[UserState]:
-        """向后兼容：返回第一个目标的状态"""
-        if self.target_addresses:
-            return self.target_states.get(self.target_addresses[0])
-        return None
-
     async def get_current_state(self, address: Optional[str] = None) -> Optional[UserState]:
         """获取目标钱包的当前状态
 

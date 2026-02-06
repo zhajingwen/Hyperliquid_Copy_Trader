@@ -27,18 +27,18 @@ is_paused = False
 trades_copied_count = 0
 bot_start_time = None
 
-# 模拟账户追踪
-simulated_balance = 0.0
-simulated_positions = {}  # "target_address:symbol" -> {'size': float, 'entry_price': float, 'side': str}
-simulated_pnl = 0.0
+# 账户追踪
+account_balance = 0.0
+tracked_positions = {}  # "target_address:symbol" -> {'size': float, 'entry_price': float, 'side': str}
+tracked_pnl = 0.0
 
 # 每个目标的仓位比率
 target_ratios: dict[str, float] = {}
 
 
 def _short_addr(address: str) -> str:
-    """返回地址的短标识"""
-    return f"{address[:6]}...{address[-4:]}"
+    """返回完整地址"""
+    return address
 
 
 def calculate_adjusted_leverage(target_leverage: float, adjustment_ratio: float, symbol: str) -> int:
@@ -111,7 +111,7 @@ def calculate_adjusted_leverage(target_leverage: float, adjustment_ratio: float,
 
 async def on_position_close(target_address: str, position_data: dict):
     """当目标钱包平仓时调用"""
-    global simulated_balance, simulated_positions, simulated_pnl
+    global account_balance, tracked_positions, tracked_pnl
 
     short = _short_addr(target_address)
     symbol = position_data.get("coin", "")
@@ -119,8 +119,8 @@ async def on_position_close(target_address: str, position_data: dict):
     logger.info(f"🔴 [{short}] 目标已平仓: {symbol}")
 
     # 平掉模拟持仓并计算盈亏
-    if settings.simulated_trading and pos_key in simulated_positions:
-        pos = simulated_positions[pos_key]
+    if pos_key in tracked_positions:
+        pos = tracked_positions[pos_key]
         # 从监控器获取当前价格
         current_price = 0
         target_state = monitor.target_states.get(target_address)
@@ -139,17 +139,17 @@ async def on_position_close(target_address: str, position_data: dict):
 
             # 返还保证金到余额
             margin_used = pos['value'] / pos['leverage']
-            simulated_balance += margin_used + pnl
-            simulated_pnl += pnl
+            account_balance += margin_used + pnl
+            tracked_pnl += pnl
 
             logger.success(f"\n💰 [{short}] 模拟持仓已平！")
             logger.success(f"   开仓价: ${pos['entry_price']:,.2f}")
             logger.success(f"   平仓价: ${current_price:,.2f}")
             logger.success(f"   盈亏: ${pnl:,.2f} ({(pnl/pos['value']*100):+.2f}%)")
-            logger.success(f"   新余额: ${simulated_balance:,.2f}")
-            logger.success(f"   累计盈亏: ${simulated_pnl:,.2f}")
+            logger.success(f"   新余额: ${account_balance:,.2f}")
+            logger.success(f"   累计盈亏: ${tracked_pnl:,.2f}")
 
-            del simulated_positions[pos_key]
+            del tracked_positions[pos_key]
 
     # 平掉你对应的持仓
     logger.info(f"   [{short}] -> 正在平掉你的持仓...")
@@ -230,12 +230,10 @@ async def on_new_order(target_address: str, order_data: dict):
             logger.success(f"✅ [{short}] 订单跟单成功！")
             trades_copied_count += 1
 
-            # 记录模拟订单
-            if settings.simulated_trading:
-                order_value = our_size * price
-                logger.success(f"\n📋 [{short}] 模拟订单已挂出！")
-                logger.success(f"   订单价值: ${order_value:,.2f}")
-                logger.success(f"   账户余额: ${simulated_balance:,.2f}")
+            order_value = our_size * price
+            logger.success(f"\n📋 [{short}] 订单已挂出！")
+            logger.success(f"   订单价值: ${order_value:,.2f}")
+            logger.success(f"   账户余额: ${account_balance:,.2f}")
 
             # 发送通知
             if notifier:
@@ -246,7 +244,7 @@ async def on_new_order(target_address: str, order_data: dict):
                     entry_price=price,
                     leverage=1.0,  # 订单在成交前没有杠杆
                     target_size=target_size,
-                    is_simulated=settings.simulated_trading,
+                    is_simulated=settings.testnet_trading,
                     target_wallet=target_address
                 )
         else:
@@ -261,7 +259,7 @@ async def on_order_fill(target_address: str, fill_data: dict):
     当订单成交时调用
     跟单已成交的订单
     """
-    global trades_copied_count, simulated_positions
+    global trades_copied_count, tracked_positions
 
     short = _short_addr(target_address)
 
@@ -272,14 +270,14 @@ async def on_order_fill(target_address: str, fill_data: dict):
 
     # 检查最大持仓数限制
     if settings.copy_rules.max_open_trades is not None:
-        current_trades = len(simulated_positions)
+        current_trades = len(tracked_positions)
         if current_trades >= settings.copy_rules.max_open_trades:
             logger.warning(f"⚠️ [{short}] 已达最大持仓数限制 ({current_trades}/{settings.copy_rules.max_open_trades}) - 跳过成交")
             return
 
     # 检查最大账户权益限制
     if settings.copy_rules.max_account_equity is not None:
-        current_equity = simulated_balance
+        current_equity = account_balance
         if current_equity >= settings.copy_rules.max_account_equity:
             logger.warning(f"⚠️ [{short}] 已达最大账户权益限制 (${current_equity:,.2f}/${settings.copy_rules.max_account_equity:,.2f}) - 跳过成交")
             return
@@ -375,7 +373,7 @@ async def on_order_fill(target_address: str, fill_data: dict):
         our_size = position_sizer.calculate_size(
             target_position=target_position,
             target_wallet_balance=target_state.balance if target_state else 1000000,
-            your_wallet_balance=simulated_balance if settings.simulated_trading else (target_state.balance if target_state else 10000)
+            your_wallet_balance=account_balance
         )
 
         if not our_size:
@@ -439,37 +437,36 @@ async def on_order_fill(target_address: str, fill_data: dict):
             logger.success(f"✅ [{short}] 成交跟单成功！")
             trades_copied_count += 1
 
-            # 更新模拟持仓
-            if settings.simulated_trading:
-                position_value = our_size * price
-                margin_required = position_value / our_leverage
+            # 更新本地持仓追踪
+            position_value = our_size * price
+            margin_required = position_value / our_leverage
 
-                if pos_key not in simulated_positions:
-                    simulated_positions[pos_key] = {
-                        'size': 0,
-                        'entry_price': 0,
-                        'leverage': our_leverage,
-                        'side': position_side.value
-                    }
+            if pos_key not in tracked_positions:
+                tracked_positions[pos_key] = {
+                    'size': 0,
+                    'entry_price': 0,
+                    'leverage': our_leverage,
+                    'side': position_side.value
+                }
 
-                pos = simulated_positions[pos_key]
+            pos = tracked_positions[pos_key]
 
-                # 根据操作方向更新持仓
-                if "Open" in direction:
-                    # 新开仓或加仓
-                    total_value = (abs(pos['size']) * pos['entry_price']) + position_value
-                    new_size = abs(pos['size']) + our_size
-                    pos['entry_price'] = total_value / new_size if new_size > 0 else price
-                    pos['size'] = new_size if position_side == PositionSide.LONG else -new_size
-                    pos['side'] = position_side.value
+            # 根据操作方向更新持仓
+            if "Open" in direction:
+                # 新开仓或加仓
+                total_value = (abs(pos['size']) * pos['entry_price']) + position_value
+                new_size = abs(pos['size']) + our_size
+                pos['entry_price'] = total_value / new_size if new_size > 0 else price
+                pos['size'] = new_size if position_side == PositionSide.LONG else -new_size
+                pos['side'] = position_side.value
 
-                logger.success(f"\n💰 [{short}] 模拟成交已执行！")
-                logger.success(f"   持仓: {symbol}")
-                if pos_key in simulated_positions:
-                    logger.success(f"   新数量: {simulated_positions[pos_key]['size']:.4f}")
-                    logger.success(f"   开仓价: ${simulated_positions[pos_key]['entry_price']:.2f}")
-                logger.success(f"   保证金: ${margin_required:,.2f}")
-                logger.success(f"   账户余额: ${simulated_balance:,.2f}")
+            logger.success(f"\n💰 [{short}] 成交已执行！")
+            logger.success(f"   持仓: {symbol}")
+            if pos_key in tracked_positions:
+                logger.success(f"   新数量: {tracked_positions[pos_key]['size']:.4f}")
+                logger.success(f"   开仓价: ${tracked_positions[pos_key]['entry_price']:.2f}")
+            logger.success(f"   保证金: ${margin_required:,.2f}")
+            logger.success(f"   账户余额: ${account_balance:,.2f}")
 
             # 发送通知
             if notifier:
@@ -480,7 +477,7 @@ async def on_order_fill(target_address: str, fill_data: dict):
                     entry_price=price,
                     leverage=our_leverage,
                     target_size=target_size,
-                    is_simulated=settings.simulated_trading,
+                    is_simulated=settings.testnet_trading,
                     target_wallet=target_address
                 )
         else:
@@ -497,18 +494,12 @@ async def get_status() -> str:
     """获取当前机器人状态（供 Telegram 使用）"""
     uptime = (datetime.now() - bot_start_time).total_seconds() / 3600 if bot_start_time else 0
 
-    if settings.simulated_trading:
-        balance = simulated_balance
-        pnl = simulated_pnl
-    else:
-        # 聚合所有目标状态
-        state = monitor.current_state if monitor else None
-        balance = state.balance if state else 0
-        pnl = state.unrealized_pnl if state else 0
+    balance = account_balance
+    pnl = tracked_pnl
 
     status_emoji = "🟢" if not is_paused else "⏸️"
     status_text = "运行中" if not is_paused else "已暂停"
-    mode = "模拟" if settings.simulated_trading else "实盘"
+    mode = "测试网" if settings.testnet_trading else "实盘"
 
     # 构建目标列表
     target_count = len(settings.target_wallets)
@@ -519,10 +510,8 @@ async def get_status() -> str:
         targets_text += f"\n  <code>{_short_addr(addr)}</code> ({ratio_str})"
 
     # 聚合持仓数
-    total_positions = 0
-    if settings.simulated_trading:
-        total_positions = len(simulated_positions)
-    elif monitor:
+    total_positions = len(tracked_positions)
+    if monitor:
         for addr in settings.target_wallets:
             state = monitor.target_states.get(addr)
             if state:
@@ -570,22 +559,13 @@ def get_orders() -> list:
 
 async def get_pnl() -> str:
     """获取盈亏信息（供 Telegram 使用）"""
-    if settings.simulated_trading:
-        balance = simulated_balance
-        equity = simulated_balance
-        pnl = simulated_pnl
-        mode = "模拟"
-    else:
-        state = monitor.current_state if monitor else None
-        balance = state.balance if state else 0
-        equity = state.total_equity if state else 0
-        pnl = state.unrealized_pnl if state else 0
-        mode = "实盘"
+    balance = account_balance
+    equity = account_balance
+    pnl = tracked_pnl
+    mode = "测试网" if settings.testnet_trading else "实盘"
 
-    total_positions = 0
-    if settings.simulated_trading:
-        total_positions = len(simulated_positions)
-    elif monitor:
+    total_positions = len(tracked_positions)
+    if monitor:
         for addr in settings.target_wallets:
             state = monitor.target_states.get(addr)
             if state:
@@ -725,29 +705,31 @@ async def main():
     跟单交易机器人主入口
     """
     global monitor, executor, position_sizer, client, telegram_bot, notifier, bot_start_time
-    global simulated_balance, trades_copied_count, target_ratios
+    global account_balance, trades_copied_count, target_ratios
 
     bot_start_time = datetime.now()
     trades_copied_count = 0
-
-    # 初始化模拟账户
-    simulated_balance = settings.simulated_account_balance
 
     logger.info("=" * 60)
     logger.info("🚀 Hyperliquid 跟单交易机器人启动中...")
     logger.info("=" * 60)
 
-    if settings.simulated_trading:
-        logger.warning("🎮 模拟交易模式")
-        logger.warning(f"💰 模拟账户余额: ${simulated_balance:,.2f}")
+    # 凭证校验
+    if not settings.hyperliquid.wallet_address:
+        logger.error("❌ 必须配置 HYPERLIQUID_WALLET_ADDRESS")
+        raise SystemExit(1)
+    if not settings.hyperliquid.private_key:
+        logger.error("❌ 必须配置 HYPERLIQUID_PRIVATE_KEY")
+        raise SystemExit(1)
+
+    if settings.testnet_trading:
+        logger.warning("=" * 60)
+        logger.warning("🧪 测试网交易模式")
+        logger.warning(f"   监听: 主网目标钱包")
+        logger.warning(f"   执行: 测试网 ({settings.hyperliquid.testnet_api_url})")
+        logger.warning(f"💳 交易钱包: {settings.hyperliquid.wallet_address}")
+        logger.warning("=" * 60)
     else:
-        # 实盘模式凭证校验
-        if not settings.hyperliquid.wallet_address:
-            logger.error("❌ 实盘模式必须配置 HYPERLIQUID_WALLET_ADDRESS")
-            raise SystemExit(1)
-        if not settings.hyperliquid.private_key:
-            logger.error("❌ 实盘模式必须配置 HYPERLIQUID_PRIVATE_KEY")
-            raise SystemExit(1)
         logger.warning("=" * 60)
         logger.warning("⚠️  实盘交易模式 - 真金白银！")
         logger.warning(f"💳 交易钱包: {settings.hyperliquid.wallet_address}")
@@ -759,6 +741,7 @@ async def main():
         logger.info(f"   目标 {i}: {addr}")
 
     # 初始化组件
+    # 监听始终使用主网
     client = HyperliquidClient(settings.hyperliquid.api_url)
 
     monitor = WalletMonitor(
@@ -767,23 +750,36 @@ async def main():
         settings.hyperliquid.ws_url
     )
 
+    # 测试网模式：executor 指向测试网 API
+    if settings.testnet_trading:
+        exchange_url = settings.hyperliquid.testnet_api_url + "/exchange"
+    else:
+        exchange_url = settings.hyperliquid.api_url + "/exchange"
+
     executor = TradeExecutor(
         wallet_address=settings.hyperliquid.wallet_address,
         private_key=settings.hyperliquid.private_key,
-        exchange_url=settings.hyperliquid.api_url + "/exchange",
-        dry_run=settings.simulated_trading
+        exchange_url=exchange_url,
+        dry_run=False,
+        is_testnet=settings.testnet_trading
     )
 
-    # 实盘模式下获取真实账户余额
-    if not settings.simulated_trading:
-        logger.info(f"\n💳 正在获取你的账户余额...")
-        my_state = await client.get_user_state(settings.hyperliquid.wallet_address)
-        if my_state and my_state.balance > 0:
-            simulated_balance = my_state.balance
-            logger.success(f"   真实账户余额: ${simulated_balance:,.2f}")
-        else:
-            logger.error("❌ 无法获取账户余额或余额为零，无法进行实盘交易")
-            raise SystemExit(1)
+    # 获取账户余额（测试网从测试网获取，实盘从主网获取）
+    if settings.testnet_trading:
+        balance_client = HyperliquidClient(settings.hyperliquid.testnet_api_url)
+        network_name = "测试网"
+    else:
+        balance_client = client
+        network_name = "主网"
+
+    logger.info(f"\n💳 正在获取{network_name}账户余额...")
+    my_state = await balance_client.get_user_state(settings.hyperliquid.wallet_address)
+    if my_state and my_state.balance > 0:
+        account_balance = my_state.balance
+        logger.success(f"   {network_name}账户余额: ${account_balance:,.2f}")
+    else:
+        logger.error(f"❌ 无法获取{network_name}账户余额或余额为零")
+        raise SystemExit(1)
 
     # 为每个目标获取状态并计算比率
     logger.info(f"\n📊 正在获取初始状态...")
@@ -801,12 +797,12 @@ async def main():
             logger.info(f"   持仓数量: {len(state.positions)}")
 
             # 根据余额自动计算比率
-            auto_ratio = simulated_balance / target_balance if target_balance > 0 else 0.01
+            auto_ratio = account_balance / target_balance if target_balance > 0 else 0.01
             target_ratios[addr] = auto_ratio
 
             logger.success(f"\n✨ [{short}] 自动计算仓位比率:")
             logger.success(f"   目标余额: ${target_balance:,.2f}")
-            logger.success(f"   你的余额: ${simulated_balance:,.2f}")
+            logger.success(f"   你的余额: ${account_balance:,.2f}")
             if auto_ratio > 0:
                 logger.success(f"   📊 比率: 1:{int(1/auto_ratio)} ({auto_ratio*100:.4f}%)")
                 logger.success(f"   含义: 目标每交易 ${int(1/auto_ratio)}，你跟单 $1")
@@ -823,10 +819,10 @@ async def main():
                 logger.info(f"   目标最小持仓: ${smallest_target_value:,.2f}")
                 logger.info(f"   所需最低余额（当前比率）: ${min_balance_needed:,.2f}")
 
-                if simulated_balance < min_balance_needed:
+                if account_balance < min_balance_needed:
                     positions_below_min = sum(1 for pos in state.positions
                                              if (abs(pos.size) * pos.entry_price * auto_ratio) < MIN_POSITION_SIZE_USD)
-                    logger.warning(f"   ⚠️  警告: 你的余额 ${simulated_balance:,.2f} 低于建议最低值！")
+                    logger.warning(f"   ⚠️  警告: 你的余额 ${account_balance:,.2f} 低于建议最低值！")
                     logger.warning(f"   {positions_below_min}/{len(state.positions)} 个持仓将被跳过（低于 $10）")
                     logger.warning(f"   建议增加余额至 ${min_balance_needed:,.2f} 以跟单所有持仓")
                 else:
@@ -859,8 +855,8 @@ async def main():
                 logger.info(f"\n" + "=" * 60)
                 logger.warning(f"📊 [{short}] 如果跟单全部 {len(state.positions)} 个持仓:")
                 logger.warning(f"   总保证金需求: ${total_simulated_margin:,.2f}")
-                logger.warning(f"   你的余额: ${simulated_balance:,.2f}")
-                logger.warning(f"   剩余: ${simulated_balance - total_simulated_margin:,.2f}")
+                logger.warning(f"   你的余额: ${account_balance:,.2f}")
+                logger.warning(f"   剩余: ${account_balance - total_simulated_margin:,.2f}")
                 logger.info(f"=" * 60)
 
     # 将第一个目标的比率设为全局（向后兼容）
@@ -938,16 +934,15 @@ async def main():
 
                     pos_key = f"{addr}:{pos.symbol}"
                     if result:
-                        # 更新模拟账户
-                        if settings.simulated_trading:
-                            simulated_positions[pos_key] = {
-                                'size': your_size if side == PositionSide.LONG else -your_size,
-                                'entry_price': pos.entry_price,
-                                'side': side.value.upper(),
-                                'leverage': your_leverage,
-                                'value': your_position_value,
-                                'margin_used': margin_needed
-                            }
+                        # 更新本地持仓追踪
+                        tracked_positions[pos_key] = {
+                            'size': your_size if side == PositionSide.LONG else -your_size,
+                            'entry_price': pos.entry_price,
+                            'side': side.value.upper(),
+                            'leverage': your_leverage,
+                            'value': your_position_value,
+                            'margin_used': margin_needed
+                        }
 
                         copied_count += 1
                         logger.success(f"   ✅ [{short}] 持仓复制成功！")
@@ -958,16 +953,16 @@ async def main():
                     logger.error(f"   ❌ [{short}] 复制持仓 {pos.symbol} 出错: {e}")
 
             # 显示最终账户状态
-            if settings.simulated_trading and copied_count > 0:
-                total_margin_used = sum(p.get('margin_used', 0) for p in simulated_positions.values())
+            if copied_count > 0:
+                total_margin_used = sum(p.get('margin_used', 0) for p in tracked_positions.values())
                 logger.info("\n" + "=" * 60)
                 logger.success(f"✅ [{short}] 现有持仓复制完成！")
                 logger.info("=" * 60)
-                logger.success(f"💰 模拟账户更新:")
+                logger.success(f"💰 账户更新:")
                 logger.success(f"   已复制持仓: {copied_count}/{len(state.positions)}")
                 logger.success(f"   已用保证金: ${total_margin_used:,.2f}")
-                logger.success(f"   账户余额: ${simulated_balance:,.2f}")
-                logger.success(f"   可用余额: ${simulated_balance - total_margin_used:,.2f}")
+                logger.success(f"   账户余额: ${account_balance:,.2f}")
+                logger.success(f"   可用余额: ${account_balance - total_margin_used:,.2f}")
                 logger.info("=" * 60)
 
             # 更新全局计数器

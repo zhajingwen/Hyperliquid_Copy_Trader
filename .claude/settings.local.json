@@ -9,7 +9,8 @@
       "Bash(git remote set-url:*)",
       "Bash(python -c:*)",
       "Bash(PYTHONPATH=src python3:*)",
-      "Bash(xxd:*)"
+      "Bash(xxd:*)",
+      "Bash(cat:*)"
     ]
   }
 }

@@ -17,7 +17,8 @@ class TradeExecutor:
         wallet_address: str,
         private_key: str,
         exchange_url: str = "https://api.hyperliquid.xyz/exchange",
-        dry_run: bool = True
+        dry_run: bool = True,
+        is_testnet: bool = False
     ):
         """初始化交易执行器
 
@@ -26,11 +27,13 @@ class TradeExecutor:
             private_key: 用于签名交易的私钥
             exchange_url: Hyperliquid 交易 API 地址
             dry_run: 为 True 时仅模拟订单，不实际执行
+            is_testnet: 为 True 时使用测试网签名参数
         """
         self.wallet_address = wallet_address.lower() if wallet_address else None
         self.private_key = private_key
         self.exchange_url = exchange_url
         self.dry_run = dry_run
+        self.is_testnet = is_testnet
 
         # 如果有凭证则初始化签名账户
         self.account = None
@@ -67,12 +70,15 @@ class TradeExecutor:
         # 添加时间戳随机数
         timestamp = int(time.time() * 1000)
 
+        # 测试网和主网使用不同的 chainId
+        chain_id = 421614 if self.is_testnet else 1337
+
         # 创建 EIP-712 结构化数据
         structured_data = {
             "domain": {
                 "name": "Exchange",
                 "version": "1",
-                "chainId": 1337,
+                "chainId": chain_id,
                 "verifyingContract": "0x0000000000000000000000000000000000000000"
             },
             "primaryType": "Agent",

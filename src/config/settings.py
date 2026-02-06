@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import ClassVar, Optional
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
@@ -9,6 +9,7 @@ load_dotenv()
 class HyperliquidConfig(BaseModel):
     api_url: str = Field(default="https://api.hyperliquid.xyz")
     ws_url: str = Field(default="wss://api.hyperliquid.xyz/ws")
+    testnet_api_url: str = Field(default="https://api.hyperliquid-testnet.xyz")
     wallet_address: Optional[str] = None
     private_key: Optional[str] = None
 
@@ -37,14 +38,13 @@ class CopyRulesConfig(BaseModel):
 
 class Settings(BaseModel):
     # Hyperliquid WebSocket 单连接最大用户订阅数
-    MAX_TARGET_WALLETS = 10
+    MAX_TARGET_WALLETS: ClassVar[int] = 10
 
     # 跟单目标地址列表（钱包或金库地址，支持逗号分隔配置多个，最多10个）
     target_wallets: list[str] = ["0x0ba5de43fa2419a25c2e680f84aff3a8f57fce22"]
 
-    # 交易模式
-    simulated_trading: bool = True
-    simulated_account_balance: float = 1000.0
+    # 交易模式: true=测试网交易, false=主网实盘
+    testnet_trading: bool = True
 
     # 各配置模块
     hyperliquid: HyperliquidConfig = Field(default_factory=HyperliquidConfig)
@@ -82,11 +82,12 @@ class Settings(BaseModel):
             )
 
         # 交易模式
-        sim_trading = os.getenv('SIMULATED_TRADING', 'true').lower()
-        settings.simulated_trading = sim_trading in ('true', '1', 'yes')
+        testnet_trading = os.getenv('TESTNET_TRADING', 'true').lower()
+        settings.testnet_trading = testnet_trading in ('true', '1', 'yes')
 
-        sim_balance = os.getenv('SIMULATED_ACCOUNT_BALANCE', '1000.0')
-        settings.simulated_account_balance = float(sim_balance)
+        settings.hyperliquid.testnet_api_url = os.getenv(
+            'HYPERLIQUID_TESTNET_API_URL', settings.hyperliquid.testnet_api_url
+        )
 
         # 跟单交易设置
         copy_open_pos = os.getenv('COPY_OPEN_POSITIONS', 'true').lower()
