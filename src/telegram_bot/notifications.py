@@ -7,29 +7,28 @@ from loguru import logger
 
 class NotificationService:
     """
-    Service for sending Telegram notifications
+    Telegram 通知服务
     """
-    
+
     def __init__(self, bot_token: str, chat_id: str):
-        """
-        Initialize notification service
-        
+        """初始化通知服务
+
         Args:
-            bot_token: Telegram bot token
-            chat_id: Chat ID to send notifications to
+            bot_token: Telegram 机器人令牌
+            chat_id: 发送通知的聊天ID
         """
         self.bot = Bot(token=bot_token)
         self.chat_id = chat_id
         self.enabled = True
-        
-        logger.info(f"Notification service initialized for chat {chat_id}")
-    
+
+        logger.info(f"通知服务已初始化，聊天ID: {chat_id}")
+
     async def send_message(self, message: str, parse_mode: str = "HTML") -> bool:
-        """Send a message to the configured chat"""
+        """发送消息到配置的聊天"""
         if not self.enabled:
-            logger.debug("Notifications disabled, skipping message")
+            logger.debug("通知已禁用，跳过发送")
             return False
-        
+
         try:
             await self.bot.send_message(
                 chat_id=self.chat_id,
@@ -38,9 +37,9 @@ class NotificationService:
             )
             return True
         except Exception as e:
-            logger.error(f"Failed to send Telegram message: {e}")
+            logger.error(f"发送 Telegram 消息失败: {e}")
             return False
-    
+
     async def send_trade_notification(
         self,
         symbol: str,
@@ -51,51 +50,51 @@ class NotificationService:
         target_size: float,
         is_simulated: bool = True
     ):
-        """Send notification about a copied trade"""
-        
-        mode_emoji = "🧪" if is_simulated else "✅"
-        mode_text = "[SIMULATED]" if is_simulated else ""
-        
-        message = f"""
-{mode_emoji} <b>New Trade Copied!</b> {mode_text}
+        """发送跟单交易通知"""
 
-<b>Symbol:</b> {symbol}
-<b>Side:</b> {side.upper()}
-<b>Your Size:</b> {size:.4f}
-<b>Entry:</b> ${entry_price:,.2f}
-<b>Leverage:</b> {leverage}x
-<b>Notional:</b> ${size * entry_price:,.2f}
+        mode_emoji = "🧪" if is_simulated else "✅"
+        mode_text = "[模拟]" if is_simulated else ""
+
+        message = f"""
+{mode_emoji} <b>跟单成功！</b> {mode_text}
+
+<b>交易对：</b> {symbol}
+<b>方向：</b> {side.upper()}
+<b>你的数量：</b> {size:.4f}
+<b>开仓价：</b> ${entry_price:,.2f}
+<b>杠杆：</b> {leverage}x
+<b>名义价值：</b> ${size * entry_price:,.2f}
 
 ━━━━━━━━━━━━━━━━━━
-<b>Target Size:</b> {target_size:.4f}
-<b>Time:</b> {datetime.now().strftime('%H:%M:%S UTC')}
+<b>目标数量：</b> {target_size:.4f}
+<b>时间：</b> {datetime.now().strftime('%H:%M:%S UTC')}
 """
         await self.send_message(message.strip())
-    
+
     async def send_position_close_notification(
         self,
         symbol: str,
         pnl: Optional[float] = None,
         is_simulated: bool = True
     ):
-        """Send notification about a closed position"""
-        
+        """发送平仓通知"""
+
         mode_emoji = "🧪" if is_simulated else "🔴"
-        mode_text = "[SIMULATED]" if is_simulated else ""
-        
+        mode_text = "[模拟]" if is_simulated else ""
+
         pnl_text = ""
         if pnl is not None:
             pnl_emoji = "📈" if pnl > 0 else "📉"
-            pnl_text = f"\n<b>PnL:</b> {pnl_emoji} ${pnl:,.2f}"
-        
-        message = f"""
-{mode_emoji} <b>Position Closed</b> {mode_text}
+            pnl_text = f"\n<b>盈亏：</b> {pnl_emoji} ${pnl:,.2f}"
 
-<b>Symbol:</b> {symbol}{pnl_text}
-<b>Time:</b> {datetime.now().strftime('%H:%M:%S UTC')}
+        message = f"""
+{mode_emoji} <b>持仓已平</b> {mode_text}
+
+<b>交易对：</b> {symbol}{pnl_text}
+<b>时间：</b> {datetime.now().strftime('%H:%M:%S UTC')}
 """
         await self.send_message(message.strip())
-    
+
     async def send_hourly_report(
         self,
         trades_copied: int,
@@ -105,37 +104,37 @@ class NotificationService:
         open_orders: int,
         target_wallet: str
     ):
-        """Send hourly trading report"""
-        
+        """发送每小时交易报告"""
+
         pnl_emoji = "📈" if account_pnl_usd > 0 else "📉"
-        
+
         message = f"""
-📊 <b>Hourly Copy Trading Report</b>
+📊 <b>每小时跟单报告</b>
 
-<b>Target:</b> <code>{target_wallet[:10]}...{target_wallet[-6:]}</code>
+<b>目标：</b> <code>{target_wallet[:10]}...{target_wallet[-6:]}</code>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-📈 <b>Trades Copied:</b> {trades_copied}
-💰 <b>Account PnL:</b> {pnl_emoji} ${account_pnl_usd:,.2f} ({account_pnl_pct:+.2f}%)
-📍 <b>Open Positions:</b> {open_positions}
-📝 <b>Open Orders:</b> {open_orders}
+📈 <b>跟单笔数：</b> {trades_copied}
+💰 <b>账户盈亏：</b> {pnl_emoji} ${account_pnl_usd:,.2f} ({account_pnl_pct:+.2f}%)
+📍 <b>持仓数量：</b> {open_positions}
+📝 <b>挂单数量：</b> {open_orders}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🕐 <b>Report Time:</b> {datetime.now().strftime('%H:%M UTC')}
+🕐 <b>报告时间：</b> {datetime.now().strftime('%H:%M UTC')}
 """
         await self.send_message(message.strip())
-    
+
     async def send_error_notification(self, error_message: str):
-        """Send error notification"""
+        """发送错误通知"""
         message = f"""
-⚠️ <b>Error Detected</b>
+⚠️ <b>检测到错误</b>
 
 <code>{error_message}</code>
 
-<b>Time:</b> {datetime.now().strftime('%H:%M:%S UTC')}
+<b>时间：</b> {datetime.now().strftime('%H:%M:%S UTC')}
 """
         await self.send_message(message.strip())
-    
+
     async def send_startup_notification(
         self,
         target_wallet: str,
@@ -143,39 +142,39 @@ class NotificationService:
         ratio: str,
         leverage_adjustment: float
     ):
-        """Send bot startup notification"""
+        """发送机器人启动通知"""
         message = f"""
-🚀 <b>Copy Trading Bot Started</b>
+🚀 <b>跟单交易机器人已启动</b>
 
-<b>Target Wallet:</b>
+<b>目标钱包：</b>
 <code>{target_wallet}</code>
 
-<b>Configuration:</b>
-• Sizing: {sizing_mode.title()}
-• Ratio: {ratio}
-• Leverage: {leverage_adjustment}x of target
-• Status: <b>ACTIVE</b> 🟢
+<b>配置信息：</b>
+• 仓位模式: {sizing_mode.title()}
+• 比率: {ratio}
+• 杠杆: {leverage_adjustment}x（相对目标）
+• 状态: <b>运行中</b> 🟢
 
-Bot is now monitoring for trades!
+机器人正在监控交易！
 """
         await self.send_message(message.strip())
-    
+
     async def send_shutdown_notification(self):
-        """Send bot shutdown notification"""
+        """发送机器人关闭通知"""
         message = """
-🛑 <b>Copy Trading Bot Stopped</b>
+🛑 <b>跟单交易机器人已停止</b>
 
-Bot has been shut down gracefully.
-Status: <b>INACTIVE</b> 🔴
+机器人已安全关闭。
+状态: <b>已停止</b> 🔴
 """
         await self.send_message(message.strip())
-    
+
     def enable(self):
-        """Enable notifications"""
+        """启用通知"""
         self.enabled = True
-        logger.info("Notifications enabled")
-    
+        logger.info("通知已启用")
+
     def disable(self):
-        """Disable notifications"""
+        """禁用通知"""
         self.enabled = False
-        logger.info("Notifications disabled")
+        logger.info("通知已禁用")

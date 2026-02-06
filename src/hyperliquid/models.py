@@ -19,7 +19,7 @@ class PositionSide(str, Enum):
 
 @dataclass
 class Position:
-    """Represents an open position"""
+    """持仓信息"""
     symbol: str
     side: PositionSide
     size: float
@@ -30,26 +30,26 @@ class Position:
     liquidation_price: Optional[float] = None
     margin: Optional[float] = None
     timestamp: Optional[datetime] = None
-    
+
     @property
     def notional_value(self) -> float:
-        """Calculate notional value of position"""
+        """计算持仓名义价值"""
         return self.size * self.current_price
-    
+
     @property
     def pnl_percentage(self) -> float:
-        """Calculate PnL percentage"""
+        """计算盈亏百分比"""
         if self.entry_price == 0:
             return 0.0
-        
+
         if self.side == PositionSide.LONG:
             return ((self.current_price - self.entry_price) / self.entry_price) * 100
-        else:  # SHORT
+        else:  # 空仓
             return ((self.entry_price - self.current_price) / self.entry_price) * 100
 
 @dataclass
 class Order:
-    """Represents an order (open or filled)"""
+    """订单信息（挂单或已成交）"""
     order_id: str
     symbol: str
     side: OrderSide
@@ -59,19 +59,19 @@ class Order:
     filled_size: float = 0.0
     status: str = "open"  # open, filled, cancelled, rejected
     timestamp: Optional[datetime] = None
-    trigger_price: Optional[float] = None  # for stop orders
-    
+    trigger_price: Optional[float] = None  # 止损单触发价格
+
     @property
     def is_filled(self) -> bool:
         return self.status == "filled"
-    
+
     @property
     def is_open(self) -> bool:
         return self.status == "open"
 
 @dataclass
 class Trade:
-    """Represents a completed trade"""
+    """已完成的交易记录"""
     trade_id: str
     symbol: str
     side: OrderSide
@@ -83,7 +83,7 @@ class Trade:
 
 @dataclass
 class UserState:
-    """Represents the complete state of a user's account"""
+    """用户账户完整状态"""
     address: str
     positions: List[Position]
     orders: List[Order]
@@ -91,27 +91,27 @@ class UserState:
     margin_used: float
     unrealized_pnl: float
     timestamp: datetime
-    
+
     @property
     def available_balance(self) -> float:
-        """Calculate available balance"""
+        """计算可用余额"""
         return self.balance - self.margin_used
-    
+
     @property
     def total_equity(self) -> float:
-        """Calculate total equity (balance + unrealized PnL)"""
+        """计算总权益（余额 + 未实现盈亏）"""
         return self.balance + self.unrealized_pnl
-    
+
     @property
     def margin_ratio(self) -> float:
-        """Calculate margin ratio"""
+        """计算保证金使用率"""
         if self.balance == 0:
             return 0.0
         return (self.margin_used / self.balance) * 100
 
 @dataclass
 class WebSocketUpdate:
-    """Represents a WebSocket update event"""
+    """WebSocket 更新事件"""
     channel: str
     data: dict
     timestamp: datetime

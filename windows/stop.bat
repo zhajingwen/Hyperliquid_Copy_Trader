@@ -1,6 +1,6 @@
 @echo off
-echo Stopping Hyperliquid Copy Trader...
+echo 正在停止 Hyperliquid 跟单交易机器人...
 docker-compose down
 echo.
-echo Bot stopped!
+echo 机器人已停止！
 pause

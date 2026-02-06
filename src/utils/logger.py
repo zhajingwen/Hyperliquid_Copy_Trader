@@ -4,24 +4,24 @@ from loguru import logger
 
 def setup_logger(log_file: str = "./logs/trading.log", log_level: str = "INFO"):
     """
-    Setup loguru logger with file and console output
+    配置 loguru 日志器，支持文件和控制台输出
     """
-    # Create logs directory if it doesn't exist
+    # 如果日志目录不存在则创建
     log_path = Path(log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Remove default handler
+
+    # 移除默认处理器
     logger.remove()
-    
-    # Add console handler with colors
+
+    # 添加带颜色的控制台处理器
     logger.add(
         sys.stdout,
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
         level=log_level,
         colorize=True
     )
-    
-    # Add file handler
+
+    # 添加文件处理器
     logger.add(
         log_file,
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function} - {message}",
@@ -30,5 +30,5 @@ def setup_logger(log_file: str = "./logs/trading.log", log_level: str = "INFO"):
         retention="30 days",
         compression="zip"
     )
-    
+
     return logger
