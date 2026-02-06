@@ -16,7 +16,6 @@ class TradeExecutor:
         self,
         wallet_address: str,
         private_key: str,
-        info_url: str = "https://api.hyperliquid.xyz/info",
         exchange_url: str = "https://api.hyperliquid.xyz/exchange",
         dry_run: bool = True
     ):
@@ -25,13 +24,11 @@ class TradeExecutor:
         Args:
             wallet_address: Hyperliquid 钱包地址
             private_key: 用于签名交易的私钥
-            info_url: Hyperliquid 信息 API 地址
             exchange_url: Hyperliquid 交易 API 地址
             dry_run: 为 True 时仅模拟订单，不实际执行
         """
         self.wallet_address = wallet_address.lower() if wallet_address else None
         self.private_key = private_key
-        self.info_url = info_url
         self.exchange_url = exchange_url
         self.dry_run = dry_run
 
@@ -365,49 +362,6 @@ class TradeExecutor:
             size=size,
             reduce_only=True
         )
-
-    async def cancel_order(self, symbol: str, order_id: str) -> bool:
-        """撤销订单
-
-        Args:
-            symbol: 交易对
-            order_id: 要撤销的订单ID
-
-        Returns:
-            成功返回 True，失败返回 False
-        """
-        if self.dry_run:
-            logger.info(f"🔵 模拟运行: 将撤销 {symbol} 的订单 {order_id}")
-            return True
-
-        try:
-            action = {
-                "type": "cancel",
-                "cancels": [{
-                    "a": self.wallet_address,
-                    "o": order_id
-                }]
-            }
-
-            signed_action = self._sign_action(action)
-
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.exchange_url,
-                    json=signed_action,
-                    headers={"Content-Type": "application/json"}
-                ) as response:
-                    if response.status == 200:
-                        logger.success(f"✅ 已撤销 {symbol} 的订单 {order_id}")
-                        return True
-                    else:
-                        error_text = await response.text()
-                        logger.error(f"撤销订单失败: {error_text}")
-                        return False
-
-        except Exception as e:
-            logger.error(f"撤销订单出错: {e}")
-            return False
 
     async def cancel_all_orders(self, symbol: Optional[str] = None) -> int:
         """撤销所有订单

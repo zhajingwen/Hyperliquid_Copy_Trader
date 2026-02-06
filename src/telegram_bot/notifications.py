@@ -1,5 +1,3 @@
-import asyncio
-from typing import Optional
 from datetime import datetime
 from telegram import Bot
 from loguru import logger
@@ -19,16 +17,11 @@ class NotificationService:
         """
         self.bot = Bot(token=bot_token)
         self.chat_id = chat_id
-        self.enabled = True
 
         logger.info(f"通知服务已初始化，聊天ID: {chat_id}")
 
     async def send_message(self, message: str, parse_mode: str = "HTML") -> bool:
         """发送消息到配置的聊天"""
-        if not self.enabled:
-            logger.debug("通知已禁用，跳过发送")
-            return False
-
         try:
             await self.bot.send_message(
                 chat_id=self.chat_id,
@@ -48,12 +41,18 @@ class NotificationService:
         entry_price: float,
         leverage: float,
         target_size: float,
-        is_simulated: bool = True
+        is_simulated: bool = True,
+        target_wallet: str = None
     ):
         """发送跟单交易通知"""
 
         mode_emoji = "🧪" if is_simulated else "✅"
         mode_text = "[模拟]" if is_simulated else ""
+
+        target_text = ""
+        if target_wallet:
+            short = f"{target_wallet[:6]}...{target_wallet[-4:]}"
+            target_text = f"\n<b>来源目标：</b> <code>{short}</code>"
 
         message = f"""
 {mode_emoji} <b>跟单成功！</b> {mode_text}
@@ -63,34 +62,10 @@ class NotificationService:
 <b>你的数量：</b> {size:.4f}
 <b>开仓价：</b> ${entry_price:,.2f}
 <b>杠杆：</b> {leverage}x
-<b>名义价值：</b> ${size * entry_price:,.2f}
+<b>名义价值：</b> ${size * entry_price:,.2f}{target_text}
 
 ━━━━━━━━━━━━━━━━━━
 <b>目标数量：</b> {target_size:.4f}
-<b>时间：</b> {datetime.now().strftime('%H:%M:%S UTC')}
-"""
-        await self.send_message(message.strip())
-
-    async def send_position_close_notification(
-        self,
-        symbol: str,
-        pnl: Optional[float] = None,
-        is_simulated: bool = True
-    ):
-        """发送平仓通知"""
-
-        mode_emoji = "🧪" if is_simulated else "🔴"
-        mode_text = "[模拟]" if is_simulated else ""
-
-        pnl_text = ""
-        if pnl is not None:
-            pnl_emoji = "📈" if pnl > 0 else "📉"
-            pnl_text = f"\n<b>盈亏：</b> {pnl_emoji} ${pnl:,.2f}"
-
-        message = f"""
-{mode_emoji} <b>持仓已平</b> {mode_text}
-
-<b>交易对：</b> {symbol}{pnl_text}
 <b>时间：</b> {datetime.now().strftime('%H:%M:%S UTC')}
 """
         await self.send_message(message.strip())
@@ -102,16 +77,24 @@ class NotificationService:
         account_pnl_pct: float,
         open_positions: int,
         open_orders: int,
-        target_wallet: str
+        target_wallets: list[str] = None
     ):
         """发送每小时交易报告"""
 
         pnl_emoji = "📈" if account_pnl_usd > 0 else "📉"
 
+        wallets = target_wallets or []
+        if len(wallets) == 1:
+            targets_text = f"<code>{wallets[0][:10]}...{wallets[0][-6:]}</code>"
+        else:
+            targets_text = f"{len(wallets)} 个目标"
+            for w in wallets:
+                targets_text += f"\n  <code>{w[:6]}...{w[-4:]}</code>"
+
         message = f"""
 📊 <b>每小时跟单报告</b>
 
-<b>目标：</b> <code>{target_wallet[:10]}...{target_wallet[-6:]}</code>
+<b>目标：</b> {targets_text}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📈 <b>跟单笔数：</b> {trades_copied}
@@ -124,34 +107,38 @@ class NotificationService:
 """
         await self.send_message(message.strip())
 
-    async def send_error_notification(self, error_message: str):
-        """发送错误通知"""
-        message = f"""
-⚠️ <b>检测到错误</b>
-
-<code>{error_message}</code>
-
-<b>时间：</b> {datetime.now().strftime('%H:%M:%S UTC')}
-"""
-        await self.send_message(message.strip())
-
     async def send_startup_notification(
         self,
-        target_wallet: str,
-        sizing_mode: str,
-        ratio: str,
-        leverage_adjustment: float
+        target_wallets: list[str] = None,
+        sizing_mode: str = "",
+        ratios: dict[str, str] = None,
+        leverage_adjustment: float = 1.0
     ):
         """发送机器人启动通知"""
+        wallets = target_wallets or []
+        ratio_map = ratios or {}
+
+        if len(wallets) == 1:
+            targets_text = f"<code>{wallets[0]}</code>"
+            ratio_text = ratio_map.get(wallets[0], "N/A")
+            ratio_line = f"• 比率: {ratio_text}"
+        else:
+            targets_text = f"{len(wallets)} 个目标钱包："
+            for w in wallets:
+                r = ratio_map.get(w, "N/A")
+                short = f"{w[:6]}...{w[-4:]}"
+                targets_text += f"\n  <code>{short}</code> ({r})"
+            ratio_line = "• 比率: 见上方各目标"
+
         message = f"""
 🚀 <b>跟单交易机器人已启动</b>
 
 <b>目标钱包：</b>
-<code>{target_wallet}</code>
+{targets_text}
 
 <b>配置信息：</b>
 • 仓位模式: {sizing_mode.title()}
-• 比率: {ratio}
+{ratio_line}
 • 杠杆: {leverage_adjustment}x（相对目标）
 • 状态: <b>运行中</b> 🟢
 
@@ -169,12 +156,3 @@ class NotificationService:
 """
         await self.send_message(message.strip())
 
-    def enable(self):
-        """启用通知"""
-        self.enabled = True
-        logger.info("通知已启用")
-
-    def disable(self):
-        """禁用通知"""
-        self.enabled = False
-        logger.info("通知已禁用")

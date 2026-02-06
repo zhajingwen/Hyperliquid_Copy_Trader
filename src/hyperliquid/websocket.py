@@ -2,7 +2,6 @@ import asyncio
 import json
 import websockets
 from typing import Optional, Callable, Dict, Any
-from datetime import datetime
 from loguru import logger
 from .models import WebSocketUpdate
 
@@ -78,58 +77,6 @@ class HyperliquidWebSocket:
 
         logger.info(f"已订阅用户更新: {address}")
 
-    async def subscribe_trades(self, symbol: str, callback: Optional[Callable] = None):
-        """
-        订阅指定交易对的成交更新
-
-        Args:
-            symbol: 交易对（如 "BTC"）
-            callback: 收到成交时调用的回调函数
-        """
-        channel = f"trades:{symbol}"
-
-        subscription = {
-            "method": "subscribe",
-            "subscription": {
-                "type": "trades",
-                "coin": symbol
-            }
-        }
-
-        self.subscriptions[channel] = subscription
-        if callback:
-            self.callbacks[channel] = callback
-
-        if self.ws:
-            await self._send_subscription(subscription)
-
-        logger.info(f"已订阅 {symbol} 成交数据")
-
-    async def subscribe_all_mids(self, callback: Optional[Callable] = None):
-        """
-        订阅所有中间价格
-
-        Args:
-            callback: 收到价格更新时调用的回调函数
-        """
-        channel = "allMids"
-
-        subscription = {
-            "method": "subscribe",
-            "subscription": {
-                "type": "allMids"
-            }
-        }
-
-        self.subscriptions[channel] = subscription
-        if callback:
-            self.callbacks[channel] = callback
-
-        if self.ws:
-            await self._send_subscription(subscription)
-
-        logger.info("已订阅所有中间价格")
-
     async def _handle_message(self, message: str):
         """处理收到的 WebSocket 消息"""
         try:
@@ -147,8 +94,7 @@ class HyperliquidWebSocket:
             # 创建更新对象
             update = WebSocketUpdate(
                 channel=channel,
-                data=data,
-                timestamp=datetime.utcnow()
+                data=data
             )
 
             # 调用对应的回调函数
@@ -167,12 +113,28 @@ class HyperliquidWebSocket:
                 elif callback_channel in channel:
                     should_call = True
                 elif channel in callback_channel:
-                    should_call = True
+                    # 对 user 频道，需要校验消息中的用户地址，避免多用户订阅时误触发
+                    if callback_channel.startswith("user:"):
+                        msg_user = ""
+                        if isinstance(data.get("data"), dict):
+                            msg_user = data["data"].get("user", "").lower()
+                        expected_addr = callback_channel.split(":", 1)[1].lower()
+                        should_call = (msg_user == expected_addr)
+                    else:
+                        should_call = True
                 elif ":" in callback_channel:
                     # 检查频道是否匹配前缀（如 "user" 匹配 "user:0x..."）
                     prefix = callback_channel.split(":")[0]
                     if channel == prefix:
-                        should_call = True
+                        # 同样需要校验用户地址
+                        if prefix == "user":
+                            msg_user = ""
+                            if isinstance(data.get("data"), dict):
+                                msg_user = data["data"].get("user", "").lower()
+                            expected_addr = callback_channel.split(":", 1)[1].lower()
+                            should_call = (msg_user == expected_addr)
+                        else:
+                            should_call = True
 
                 if should_call:
                     callback_found = True
@@ -222,11 +184,6 @@ class HyperliquidWebSocket:
             except Exception as e:
                 logger.error(f"WebSocket 监听出错: {e}")
                 await asyncio.sleep(self.reconnect_delay)
-
-    async def run(self):
-        """启动 WebSocket 连接和监听循环"""
-        self.is_running = True
-        await self.listen()
 
     async def stop(self):
         """停止 WebSocket 连接"""

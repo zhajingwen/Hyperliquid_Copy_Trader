@@ -1,6 +1,4 @@
-import asyncio
 from typing import Optional, Callable
-from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -269,25 +267,15 @@ class TelegramBot:
             await update.message.reply_text("⛔ 未授权")
             return
 
-        # TODO: 从数据库获取实际盈亏数据
-        message = """
-💰 <b>账户盈亏摘要</b>
-
-<b>本次会话：</b>
-• 总交易数: 0
-• 盈利笔数: 0
-• 亏损笔数: 0
-• 胜率: 0%
-
-<b>盈亏：</b>
-• 今日: $0.00 (0%)
-• 本周: $0.00 (0%)
-• 累计: $0.00 (0%)
-
-🕐 <i>更新时间: {}</i>
-        """.format(datetime.now().strftime('%H:%M:%S UTC'))
-
-        await update.message.reply_text(message.strip(), parse_mode="HTML")
+        if self.get_pnl_callback:
+            try:
+                pnl_text = await self.get_pnl_callback()
+                await update.message.reply_text(pnl_text, parse_mode="HTML")
+            except Exception as e:
+                logger.error(f"获取盈亏出错: {e}")
+                await update.message.reply_text(f"❌ 错误: {e}")
+        else:
+            await update.message.reply_text("💰 盈亏回调未配置")
 
     async def start(self):
         """启动 Telegram 机器人"""

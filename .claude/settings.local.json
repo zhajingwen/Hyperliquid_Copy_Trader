@@ -6,7 +6,10 @@
       "Bash(xargs cat:*)",
       "Bash(python3 -m py_compile:*)",
       "Bash(python -m py_compile:*)",
-      "Bash(git remote set-url:*)"
+      "Bash(git remote set-url:*)",
+      "Bash(python -c:*)",
+      "Bash(PYTHONPATH=src python3:*)",
+      "Bash(xxd:*)"
     ]
   }
 }

@@ -1,6 +1,5 @@
 import aiohttp
-import json
-from typing import Optional, List, Dict, Any
+from typing import Optional
 from loguru import logger
 from .models import Position, Order, UserState, PositionSide, OrderSide
 
@@ -12,7 +11,6 @@ class HyperliquidClient:
     def __init__(self, api_url: str = "https://api.hyperliquid.xyz"):
         self.api_url = api_url
         self.info_url = f"{api_url}/info"
-        self.exchange_url = f"{api_url}/exchange"
         self.session: Optional[aiohttp.ClientSession] = None
 
     async def __aenter__(self):
@@ -73,9 +71,7 @@ class HyperliquidClient:
                             entry_price=float(position.get("entryPx", 0)),
                             current_price=float(position.get("positionValue", 0)) / abs(size) if size != 0 else 0,
                             leverage=float(position.get("leverage", {}).get("value", 1)),
-                            unrealized_pnl=float(position.get("unrealizedPnl", 0)),
-                            liquidation_price=float(position.get("liquidationPx")) if position.get("liquidationPx") else None,
-                            margin=float(position.get("marginUsed", 0))
+                            unrealized_pnl=float(position.get("unrealizedPnl", 0))
                         ))
 
             # 解析订单
@@ -90,14 +86,11 @@ class HyperliquidClient:
                         order_type=order.get("orderType", "limit").lower(),
                         size=float(order.get("sz", 0)),
                         price=float(order.get("limitPx", 0)) if order.get("limitPx") else None,
-                        filled_size=float(order.get("szFilled", 0)),
-                        status="open",
                         trigger_price=float(order.get("triggerPx", 0)) if order.get("triggerPx") else None
                     ))
 
             # 解析账户余额
             balance = float(response.get("marginSummary", {}).get("accountValue", 0))
-            margin_used = float(response.get("marginSummary", {}).get("totalMarginUsed", 0))
             unrealized_pnl = float(response.get("marginSummary", {}).get("totalNtlPos", 0))
 
             from datetime import datetime
@@ -106,38 +99,10 @@ class HyperliquidClient:
                 positions=positions,
                 orders=orders,
                 balance=balance,
-                margin_used=margin_used,
                 unrealized_pnl=unrealized_pnl,
                 timestamp=datetime.utcnow()
             )
 
         except Exception as e:
             logger.error(f"获取用户状态失败 {address}: {e}")
-            return None
-
-    async def get_all_assets(self) -> List[Dict[str, Any]]:
-        """获取所有可交易资产列表"""
-        try:
-            data = {"type": "meta"}
-            response = await self._post(self.info_url, data)
-            return response.get("universe", [])
-        except Exception as e:
-            logger.error(f"获取资产列表失败: {e}")
-            return []
-
-    async def get_market_price(self, symbol: str) -> Optional[float]:
-        """获取指定交易对的当前市场价格"""
-        try:
-            data = {
-                "type": "allMids"
-            }
-            response = await self._post(self.info_url, data)
-
-            # 响应为 symbol: price 的字典
-            if isinstance(response, dict):
-                return float(response.get(symbol, 0))
-            return None
-
-        except Exception as e:
-            logger.error(f"获取 {symbol} 市场价格失败: {e}")
             return None

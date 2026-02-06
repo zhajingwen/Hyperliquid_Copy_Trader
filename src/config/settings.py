@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -16,22 +15,17 @@ class HyperliquidConfig(BaseModel):
 class TelegramConfig(BaseModel):
     bot_token: Optional[str] = None
     chat_id: Optional[str] = None
-    report_interval_hours: int = 1
 
 class SizingConfig(BaseModel):
     mode: str = "proportional"  # "fixed"（固定）或 "proportional"（按比例）
-    fixed_size: float = 100.0
     portfolio_ratio: float = 0.01  # 1:100 比例
     max_position_size: float = 1000.0
     max_total_exposure: float = 5000.0
 
 class LeverageConfig(BaseModel):
     adjustment_ratio: float = 0.5
-    max_leverage: float = 10.0
-    min_leverage: float = 1.0
 
 class CopyRulesConfig(BaseModel):
-    copy_existing_positions: bool = True
     copy_existing_orders: bool = True
     copy_open_positions: bool = True
     auto_adjust_size: bool = True
@@ -39,20 +33,14 @@ class CopyRulesConfig(BaseModel):
     max_open_trades: Optional[int] = None  # None = 无限制
     max_open_orders: Optional[int] = None  # None = 无限制
     max_account_equity: Optional[float] = None  # None = 无限制
-    min_entry_quality_pct: float = 5.0
-    max_slippage_pct: float = 1.0
-    min_position_size_usd: float = 10.0
     blocked_assets: list[str] = []  # 不跟单的资产（如 ["BTC", "ETH"]）
 
-class RiskManagementConfig(BaseModel):
-    max_concurrent_positions: int = 10
-    max_daily_loss_usd: float = 500.0
-    enable_custom_stops: bool = False
-    stop_loss_pct: float = 5.0
-
 class Settings(BaseModel):
-    # 跟单目标地址（钱包或金库地址，机器人统一处理）
-    target_wallet: str = "0x0ba5de43fa2419a25c2e680f84aff3a8f57fce22"
+    # Hyperliquid WebSocket 单连接最大用户订阅数
+    MAX_TARGET_WALLETS = 10
+
+    # 跟单目标地址列表（钱包或金库地址，支持逗号分隔配置多个，最多10个）
+    target_wallets: list[str] = ["0x0ba5de43fa2419a25c2e680f84aff3a8f57fce22"]
 
     # 交易模式
     simulated_trading: bool = True
@@ -64,16 +52,10 @@ class Settings(BaseModel):
     sizing: SizingConfig = Field(default_factory=SizingConfig)
     leverage: LeverageConfig = Field(default_factory=LeverageConfig)
     copy_rules: CopyRulesConfig = Field(default_factory=CopyRulesConfig)
-    risk_management: RiskManagementConfig = Field(default_factory=RiskManagementConfig)
 
     # 路径配置
     log_level: str = "INFO"
     log_file: str = "./logs/trading.log"
-    database_url: str = "sqlite:///./data/trading.db"
-
-    class Config:
-        env_file = '.env'
-        env_file_encoding = 'utf-8'
 
     @classmethod
     def load(cls) -> 'Settings':
@@ -85,7 +67,19 @@ class Settings(BaseModel):
         settings.hyperliquid.wallet_address = os.getenv('HYPERLIQUID_WALLET_ADDRESS')
         settings.hyperliquid.private_key = os.getenv('HYPERLIQUID_PRIVATE_KEY')
 
-        settings.target_wallet = os.getenv('TARGET_WALLET_ADDRESS', settings.target_wallet)
+        # 解析逗号分隔的目标钱包地址
+        raw_targets = os.getenv('TARGET_WALLET_ADDRESS', '')
+        if raw_targets:
+            settings.target_wallets = [
+                addr.strip() for addr in raw_targets.split(',') if addr.strip()
+            ]
+
+        # Hyperliquid WebSocket 最多支持订阅 10 个用户的订单流
+        if len(settings.target_wallets) > cls.MAX_TARGET_WALLETS:
+            raise ValueError(
+                f"目标钱包数量 ({len(settings.target_wallets)}) 超过 Hyperliquid WebSocket 限制 ({cls.MAX_TARGET_WALLETS})，"
+                f"请减少 TARGET_WALLET_ADDRESS 中的地址数量"
+            )
 
         # 交易模式
         sim_trading = os.getenv('SIMULATED_TRADING', 'true').lower()
@@ -131,7 +125,6 @@ class Settings(BaseModel):
 
         settings.log_level = os.getenv('LOG_LEVEL', settings.log_level)
         settings.log_file = os.getenv('LOG_FILE', settings.log_file)
-        settings.database_url = os.getenv('DATABASE_URL', settings.database_url)
 
         return settings
 
